@@ -10,6 +10,13 @@
   <label id="drawer_show_label" class="drawer_switch_label" for="drawer_switch">&lt;</label>
   <nav id="buttons">
     <ul>
+      <li>
+        <%= form_tag erd.root_path, :method => :get, :id => 'filter_form' do %>
+          <%= text_field_tag 'filter', @filter, :id => 'model_filter', :placeholder => 'Filter models...' %>
+        <% end %>
+      </li>
+      <li><a href="#!" id="fit_to_screen" class="menu_button">Fit to Screen</a></li>
+      <li><a href="#!" id="reset_zoom" class="menu_button">Reset Zoom</a></li>
       <li><a href="#!" id="save_position_changes" class="menu_button">Save Position Changes</a></li>
       <li><%= link_to 'Edit the Database', :edit, :id => 'link_to_edit', :class => 'menu_button' %></li>
     </ul>

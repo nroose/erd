@@ -16,6 +16,9 @@ Bundler.require
 require 'capybara'
 require 'selenium/webdriver'
 
+# Use WEBrick as Capybara server (Puma not available)
+Capybara.server = :webrick
+
 begin
   require "action_dispatch/system_test_case"
 rescue LoadError
@@ -29,7 +32,13 @@ else
 end
 
 ActiveRecord::Migration.verbose = false
-if defined? ActiveRecord::MigrationContext  # >= 5.2
+if ActiveRecord.version >= Gem::Version.new('7.2')
+  # Rails 7.2+ uses a different migration API
+  ActiveRecord::Migrator.migrations_paths = Rails.application.paths['db/migrate'].to_a
+  schema_migration = ActiveRecord::SchemaMigration.new(ActiveRecord::Base.connection_pool)
+  internal_metadata = ActiveRecord::InternalMetadata.new(ActiveRecord::Base.connection_pool)
+  ActiveRecord::MigrationContext.new(ActiveRecord::Migrator.migrations_paths, schema_migration, internal_metadata).migrate
+elsif defined? ActiveRecord::MigrationContext  # >= 5.2
   ActiveRecord::Migrator.migrations_paths = Rails.application.paths['db/migrate'].to_a
   ActiveRecord::Base.connection.migration_context.migrate
 else

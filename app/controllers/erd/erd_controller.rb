@@ -9,7 +9,8 @@ module Erd
     OLD_POSITIONS_JSON_FILE = Rails.root.join('db/erd_positions.json').freeze  # for compatibility
 
     def index
-      @erd = render_plain generate_plain, saved_positions
+      @erd = render_plain generate_plain(params[:filter]), saved_positions
+      @filter = params[:filter]
     end
 
     def edit
@@ -89,7 +90,7 @@ module Erd
       end
     end
 
-    def generate_plain
+    def generate_plain(filter = nil)
       if Rails.respond_to?(:autoloaders) && Rails.autoloaders.try(:zeitwerk_enabled?)
         Zeitwerk::Loader.eager_load_all
       else
@@ -97,6 +98,19 @@ module Erd
       end
       ar_descendants = ActiveRecord::Base.descendants.reject {|m| m.name.in?(%w(ActiveRecord::SchemaMigration ActiveRecord::InternalMetadata ApplicationRecord)) }
       ar_descendants.reject! {|m| !m.table_exists? }
+
+      # Apply filter if provided
+      if filter.present?
+        filter_str = filter.to_s.downcase
+        ar_descendants.select! {|m| m.name.downcase.include?(filter_str) }
+      end
+
+      # Limit number of models to prevent overwhelming diagrams
+      # Set ERD_MAX_MODELS environment variable to override (default: 50)
+      max_models = ENV.fetch('ERD_MAX_MODELS', '50').to_i
+      if ar_descendants.size > max_models
+        ar_descendants = ar_descendants.sort_by(&:name).take(max_models)
+      end
 
       g = GraphViz.new('ERD', :type => :digraph, :rankdir => 'LR', :labelloc => :t, :ranksep => '1.5', :nodesep => '1.8', :margin => '0,0', :splines => 'spline') {|g|
         nodes = ar_descendants.each_with_object({}) do |model, hash|

@@ -9,7 +9,13 @@ module Erd
     class << self
       def status
         migrations = []
-        migration_table_name = defined?(ActiveRecord::SchemaMigration) ? ActiveRecord::SchemaMigration.table_name : ActiveRecord::Migrator.schema_migrations_table_name
+        migration_table_name = if ActiveRecord.version >= Gem::Version.new('7.2')
+          ActiveRecord::SchemaMigration.new(ActiveRecord::Base.connection_pool).table_name
+        elsif defined?(ActiveRecord::SchemaMigration)
+          ActiveRecord::SchemaMigration.table_name
+        else
+          ActiveRecord::Migrator.schema_migrations_table_name
+        end
         return migrations unless ActiveRecord::Base.connection.table_exists? migration_table_name
 
         migrated_versions = ActiveRecord::Base.connection.select_values("SELECT version FROM #{migration_table_name}").map {|v| '%.3d' % v}
@@ -35,14 +41,25 @@ module Erd
           Array.wrap(version_or_filenames).each do |version_or_filename|
             version = File.basename(version_or_filename)[/\d{3,}/]
 
-            if defined? ActiveRecord::MigrationContext  # >= 5.2
+            if ActiveRecord.version >= Gem::Version.new('7.2')
+              # Rails 7.2+ migration context API
+              schema_migration = ActiveRecord::SchemaMigration.new(ActiveRecord::Base.connection_pool)
+              internal_metadata = ActiveRecord::InternalMetadata.new(ActiveRecord::Base.connection_pool)
+              ActiveRecord::MigrationContext.new(ActiveRecord::Migrator.migrations_paths, schema_migration, internal_metadata).run(direction, version.to_i)
+            elsif defined? ActiveRecord::MigrationContext  # >= 5.2
               ActiveRecord::Base.connection.migration_context.run(direction, version.to_i)
             else
               ActiveRecord::Migrator.run(direction, ActiveRecord::Migrator.migrations_paths, version.to_i)
             end
           end if version_or_filenames
         end
-        if ActiveRecord::Base.schema_format == :ruby
+        schema_format = if ActiveRecord.version >= Gem::Version.new('7.1')
+          ActiveRecord.schema_format
+        else
+          ActiveRecord::Base.schema_format
+        end
+
+        if schema_format == :ruby
           File.open(ENV['SCHEMA'] || "#{Rails.root}/db/schema.rb", 'w') do |file|
             ActiveRecord::SchemaDumper.dump(ActiveRecord::Base.connection, file)
           end

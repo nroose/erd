@@ -549,12 +549,26 @@ li {
   padding: 12px 20px;
   color: white;
   text-decoration: none;
-  font-size: 13px; }
+  font-size: 13px;
+  display: block;
+  margin-bottom: 5px; }
   .menu_button:hover {
     background: rgba(0, 0, 0, 0.8); }
+
+#filter_form {
+  margin: 0;
+  padding: 0; }
+
+#model_filter {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 8px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  font-size: 13px;
+  width: 160px;
+  margin-bottom: 5px; }
 #save_position_changes {
   visibility: hidden;
-  top: 70px;
   background: rgba(191, 0, 0, 0.6); }
   #save_position_changes:hover {
     background: rgba(191, 0, 0, 0.8); }

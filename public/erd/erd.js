@@ -97,7 +97,7 @@ class ERD {
       } else if (rect.vertex.y > rect.bottom) {
         [rect.vertex.x, rect.vertex.y, rect.vertex.direction] = [y2x(rect.bottom), rect.bottom, 'v'];
       } else {
-        from.vertex.direction = 'h';
+        rect.vertex.direction = 'h';
       }
     }
 
@@ -135,7 +135,6 @@ class ERD {
     $('div.model a.cancel').on('click', this.handle_cancel_click);
     $('div.model a.close').on('click', this.handle_remove_model_click);
     $('#new_model_add_column').on('click', this.handle_new_model_add_column_click);
-    $('div.model a.cancel').on('click', this.handle_cancel_click);
     $('div#open_migration').on('click', this.handle_open_migration_click);
     $('div#close_migration').on('click', this.handle_close_migration_click);
     $('#save_position_changes').on('click', this.handle_save_position_changes_click);
@@ -164,7 +163,7 @@ class ERD {
       const change = {};
       $(this).find('td').each(function() {
         const name = $(this).data('name');
-        const value = $(this).html();
+        const value = $(this).text();
         change[name] = value;
       });
       return change;
@@ -283,6 +282,7 @@ class ERD {
 
 
   handle_text_elem_click(ev) {
+    ev.preventDefault();
     const target = $(ev.currentTarget);
     const text = target.text();
 
@@ -316,9 +316,7 @@ class ERD {
     window.erd.upsert_change('remove_model', model_name, '', '', '');
     parent.hide();
 
-    $.each(this.edges, (i, edge) => {
-      if ((edge.from === model_name) || (edge.to === model_name)) { this.edges.splice(i, 1); }
-    });
+    this.edges = this.edges.filter(edge => (edge.from !== model_name) && (edge.to !== model_name));
     this.paper.clear();
     this.connect_arrows(this.edges);
   }
@@ -335,7 +333,6 @@ class ERD {
     ev.preventDefault();
 
     const target = $(ev.currentTarget);
-    const text = target.text();
 
     const m = target.parents('div.model');
     if (m.hasClass('noclick')) {
@@ -353,7 +350,6 @@ class ERD {
     ev.preventDefault();
 
     const target = $(ev.currentTarget);
-    const text = target.text();
 
     const m = target.parents('div.model');
     if (m.hasClass('noclick')) {
@@ -375,8 +371,89 @@ class ERD {
 $(function() {
   window.erd = new ERD('erd', $('#erd'), window.raw_edges);
 
-  $('#erd').css('height', window.innerHeight);
-  $(window).on('resize', () => $('#erd').css('height', window.innerHeight));
+  // Set initial container height to viewport
+  const $erd = $('#erd');
+  $erd.css('height', window.innerHeight);
+  $(window).on('resize', () => $erd.css('height', window.innerHeight));
+
+  // Ensure container is large enough for all absolutely positioned content
+  const svgWidth = parseInt($erd.data('svg_width')) || 3000;
+  const svgHeight = parseInt($erd.data('svg_height')) || 8000;
+  $erd.css({
+    'min-width': svgWidth + 'px',
+    'min-height': svgHeight + 'px'
+  });
+
+  // Fit to screen functionality
+  $('#fit_to_screen').click(function(ev) {
+    ev.preventDefault();
+    const models = $('.model');
+    if (models.length === 0) return;
+
+    // Reset any existing zoom first to get accurate measurements
+    const $erd = $('#erd');
+    $erd.css('zoom', '1');
+
+    // Get the actual viewport size (visible area) - use parent container dimensions
+    // because #erd might be larger than the visible area due to min-height
+    const viewWidth = $erd.parent().width();
+    const viewHeight = window.innerHeight;
+
+    let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+    models.each(function() {
+      const $model = $(this);
+      const x = parseFloat($model.css('left'));
+      const y = parseFloat($model.css('top'));
+      const width = $model.width();
+      const height = $model.height();
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x + width);
+      maxY = Math.max(maxY, y + height);
+    });
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+
+    // Calculate zoom to fit both dimensions
+    const zoomX = viewWidth / contentWidth;
+    const zoomY = viewHeight / contentHeight;
+    const zoom = Math.min(zoomX, zoomY, 1) * 0.9;
+
+    // Apply zoom
+    $erd.css('zoom', zoom);
+
+    // Use setTimeout to ensure zoom is applied before scrolling
+    setTimeout(function() {
+      // Center the content if it fits, otherwise show from top-left
+      const scrollX = contentWidth * zoom < viewWidth ? Math.max(0, (minX + maxX) / 2 - viewWidth / zoom / 2) : minX;
+      const scrollY = contentHeight * zoom < viewHeight ? Math.max(0, (minY + maxY) / 2 - viewHeight / zoom / 2) : minY;
+
+      $erd.scrollLeft(scrollX);
+      $erd.scrollTop(scrollY);
+    }, 0);
+  });
+
+  // Reset zoom
+  $('#reset_zoom').click(function(ev) {
+    ev.preventDefault();
+    $('#erd').css('zoom', '1').scrollLeft(0).scrollTop(0);
+  });
+
+  // Model filter - submit form on Enter key
+  $('#model_filter').on('keypress', function(e) {
+    if (e.which === 13) {
+      e.preventDefault();
+      $('#filter_form').submit();
+    }
+  });
+
+  // Restore focus to filter input after page load
+  if ($('#model_filter').val()) {
+    const input = $('#model_filter')[0];
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
 
   $("#open_migration").click(function() {
     $('#close_migration, #open_create_model_dialog').css('right', ($('#migration').width() + ($(this).width() / 2)) - 5);
@@ -406,7 +483,7 @@ $(function() {
         const model = $('#new_model_name').val();
         let columns = '';
         $('#create_model_table > tbody > tr').each(function(i, row) {
-          const [name, type] = $(row).find('input').map((_, v)=> $(v).val());
+          const [name, type] = $(row).find('input').map((_, v)=> $(v).val()).get();
           if (name) { columns += `${name}${type ? `:${type}` : ''} `; }
         });
         window.erd.upsert_change('create_model', model, columns, '', '');
